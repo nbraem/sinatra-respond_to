@@ -199,6 +199,31 @@ module Sinatra
         response['Content-Type'][/charset=([^;]+)/, 1]
       end
 
+      # Returns true if the given value is a mime match for the given mime match
+      # specification, false otherwise.
+      #
+      #    Rack::Mime.match?('text/html', 'text/*') => true
+      #    Rack::Mime.match?('text/plain', '*') => true
+      #    Rack::Mime.match?('text/html', 'application/json') => false
+      def mime_match?(value, matcher)
+        v1, v2 = value.split('/', 2)
+        m1, m2 = matcher.split('/', 2)
+
+        if m1 == '*'
+          if m2.nil? || m2 == '*'
+            return true
+          elsif m2 == v2
+            return true
+          else
+            return false
+          end
+        end
+
+        return false if v1 != m1
+        return true if m2.nil? || m2 == '*'
+        m2 == v2
+      end
+
       def respond_to(&block)
         wants = {}
         def wants.method_missing(type, *args, &handler)
@@ -212,8 +237,12 @@ module Sinatra
           # Loop through request.accept in prioritized order looking for a Mime Type having a format
           # that is recognized.
           alt = nil
+
+          # match default format first
+          wants_formats = wants.keys.sort_by { |k| k == settings.default_content ? 0 : 1 }
+
           request.accept.each do |mime_type|
-            break if alt = wants.keys.detect {|k| ::Sinatra::Base.mime_type(k) == mime_type}
+            break if alt = wants_formats.detect {|k| mime_match?(::Sinatra::Base.mime_type(k), mime_type) }
           end
           format alt if alt
         end
